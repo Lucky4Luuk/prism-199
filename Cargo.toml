@@ -9,3 +9,6 @@ edition = "2021"
 winit = "0.26.1"
 winit_input_helper = "0.12.0"
 pixels = "0.9.0"
+
+wasmer = { version = "2.3.0" }
+# wasmer = { git = "https://github.com/wasmerio/wasmer.git", rev = "a7aa5a79bf0589aaf57eb3d106dc35ba75c82c80", features = ["cranelift"] }

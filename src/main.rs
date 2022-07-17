@@ -1,9 +1,13 @@
-use pixels::{Error, Pixels, SurfaceTexture};
+use pixels::{Pixels, SurfaceTexture};
 use winit::dpi::LogicalSize;
 use winit::event::{Event, VirtualKeyCode};
 use winit::event_loop::{ControlFlow, EventLoop};
 use winit::window::WindowBuilder;
 use winit_input_helper::WinitInputHelper;
+
+pub mod runtime;
+
+use runtime::Runtime;
 
 const WINDOW_WIDTH: u32 = 1680;
 const WINDOW_HEIGHT: u32 = 720;
@@ -11,7 +15,7 @@ const WINDOW_HEIGHT: u32 = 720;
 const BUFFER_WIDTH: u32 = 168;
 const BUFFER_HEIGHT: u32 = 72;
 
-struct FrameInfo<'frame> {
+pub struct FrameInfo<'frame> {
     buf: &'frame mut [u8],
     resolution: (usize, usize),
 }
@@ -47,10 +51,12 @@ fn main() {
         Pixels::new(BUFFER_WIDTH, BUFFER_HEIGHT, surface_texture).expect("Failed to create Pixels object!")
     };
 
+    let mut runtime = Runtime::new("../prism-os/target/wasm32-unknown-unknown/release/prism_os.wasm");
+
     event_loop.run(move |event, _, control_flow| {
         // Draw the current frame
         if let Event::RedrawRequested(_) = event {
-            draw(FrameInfo {
+            runtime.draw(FrameInfo {
                 buf: pixels.get_frame(),
                 resolution: (BUFFER_WIDTH as usize, BUFFER_HEIGHT as usize),
             });
