@@ -1,5 +1,4 @@
-use std::io::Read;
-use wasmer::{Store, Module, Instance, Value, NativeFunc, imports};
+use wasmer::{Store, Module, Instance, NativeFunc, imports};
 
 pub struct Runtime {
     module: Module,
@@ -20,16 +19,9 @@ impl Runtime {
         // First we have to copy our slice into the VM memory
         // This way it becomes accessible to our code running in the wasmer VM
         let memory = instance.exports.get_memory("memory").expect("Failed to get memory!");
-        // let set_at: NativeFunc<(i32, i32), ()> = instance.exports.get_native_function("set_at").expect("Failed to get set_at function!");
         let buf_mem_addr = memory.data_size() as u32;
         println!("mem_addr: {}", buf_mem_addr);
         memory.grow(1).expect("Failed to grow memory!");
-        // set_at.call(mem_addr, &[0u8; 168*72*4]);
-        // unsafe { memory.view().copy_from(&[0u8; 168*72*4]) };
-        // for (byte, cell) in [0u8; 168*72*4].bytes().zip(memory.view()[0..(168*72*4)].iter())
-        // {
-        //     cell.set(byte);
-        // }
         let buf = [0u8; 168*72*4];
         memory.view()[buf_mem_addr as usize .. (buf_mem_addr as usize + 168*72*4)].iter().enumerate().for_each(|(i, c)| c.set(buf[i]));
 
@@ -41,10 +33,10 @@ impl Runtime {
         }
     }
 
-    pub fn draw(&mut self, info: crate::FrameInfo) {
+    pub fn tick(&mut self, info: crate::FrameInfo, input: u64, delta_s: f32) {
         // The framebuffer slice exists in the VM too, so we can use it to call the draw function
-        let func: NativeFunc<u32, ()> = self.instance.exports.get_native_function("draw_unsafe").expect("Failed to get draw_unsafe function!");
-        func.call(self.buf_mem_addr).expect("Failed to call draw_unsafe function!");
+        let func: NativeFunc<(u32, u64, f32), ()> = self.instance.exports.get_native_function("tick").expect("Failed to get tick function!");
+        func.call(self.buf_mem_addr, input, delta_s).expect("Failed to call tick function!");
 
         // After doing so, we must read back the slice from the VM's memory
         // We need to do this, so we can actually see the data the VM has changed and render it

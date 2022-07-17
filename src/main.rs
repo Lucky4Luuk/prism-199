@@ -1,11 +1,12 @@
 use pixels::{Pixels, SurfaceTexture};
 use winit::dpi::LogicalSize;
-use winit::event::{Event, VirtualKeyCode};
+use winit::event::Event;
 use winit::event_loop::{ControlFlow, EventLoop};
 use winit::window::WindowBuilder;
 use winit_input_helper::WinitInputHelper;
 
 pub mod runtime;
+pub mod input;
 
 use runtime::Runtime;
 
@@ -17,19 +18,6 @@ const BUFFER_HEIGHT: u32 = 72;
 
 pub struct FrameInfo<'frame> {
     buf: &'frame mut [u8],
-    resolution: (usize, usize),
-}
-
-fn draw(info: FrameInfo) {
-    for x in 0..info.resolution.0 {
-        for y in 0..info.resolution.1 {
-            let i = (x + y * info.resolution.0) * 4;
-            info.buf[i  ] = 255;
-            info.buf[i+1] = 0;
-            info.buf[i+2] = 0;
-            info.buf[i+3] = 255;
-        }
-    }
 }
 
 fn main() {
@@ -37,10 +25,11 @@ fn main() {
     let mut input = WinitInputHelper::new();
     let window = {
         let size = LogicalSize::new(WINDOW_WIDTH as f64, WINDOW_HEIGHT as f64);
+        let min_size = LogicalSize::new(168f64, 72f64);
         WindowBuilder::new()
             .with_title("PRISM-199 - FANTASY COMPUTER - V[0.1]")
             .with_inner_size(size)
-            .with_min_inner_size(size)
+            .with_min_inner_size(min_size)
             .build(&event_loop)
             .unwrap()
     };
@@ -53,13 +42,15 @@ fn main() {
 
     let mut runtime = Runtime::new("../prism-os/target/wasm32-unknown-unknown/release/prism_os.wasm");
 
+    let mut previous_frame = std::time::Instant::now();
+    let mut delta_s = 0.0;
+
     event_loop.run(move |event, _, control_flow| {
         // Draw the current frame
         if let Event::RedrawRequested(_) = event {
-            runtime.draw(FrameInfo {
+            runtime.tick(FrameInfo {
                 buf: pixels.get_frame(),
-                resolution: (BUFFER_WIDTH as usize, BUFFER_HEIGHT as usize),
-            });
+            }, input::input_to_u64(&input), delta_s);
             if pixels
                 .render()
                 .map_err(|e| eprintln!("pixels.render() failed: {}", e))
@@ -73,7 +64,7 @@ fn main() {
         // Handle input events
         if input.update(&event) {
             // Close events
-            if input.key_pressed(VirtualKeyCode::Escape) || input.quit() {
+            if input.quit() {
                 *control_flow = ControlFlow::Exit;
                 return;
             }
@@ -81,10 +72,11 @@ fn main() {
             // Resize the window
             if let Some(size) = input.window_resized() {
                 pixels.resize_surface(size.width, size.height);
-                // resolution = (size.width as usize, size.height as usize);
             }
 
-            // Update internal state and request a redraw
+            let now = std::time::Instant::now();
+            delta_s = (now - previous_frame).as_secs_f32();
+            previous_frame = now;
             window.request_redraw();
         }
     });
