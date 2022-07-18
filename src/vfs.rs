@@ -1,5 +1,8 @@
 use std::collections::HashMap;
 
+use lazy_static::lazy_static;
+use regex::Regex;
+
 use serde::{Serialize, Deserialize};
 
 #[derive(Debug)]
@@ -8,6 +11,33 @@ pub enum VFSError {
     CreatePathDoesNotExist,
     FilePathIsFolder,
     FolderPathIsFile,
+    PathInvalid,
+}
+
+lazy_static! {
+    static ref PATH_REGEX: Regex = Regex::new(r"[^a-zA-Z0-9_\-\$]").expect("Failed to compile path regex!");
+}
+
+fn validate_path(path: Vec<String>) -> Result<Vec<String>, VFSError> {
+    for sub in &path {
+        if PATH_REGEX.is_match(sub) {
+            eprintln!("path: {:?}", path);
+            return Err(VFSError::PathInvalid);
+        }
+    }
+    Ok(path)
+}
+
+fn clean_path<S: Into<String>>(path: S) -> String {
+    let mut path = path.into();
+    path = path.replace(".", "$");
+    if path.starts_with("/") {
+        path.remove(0);
+    }
+    if path.ends_with("/") {
+        path.pop();
+    }
+    path
 }
 
 #[derive(Serialize, Deserialize)]
@@ -35,35 +65,42 @@ impl Vfs {
     }
 
     fn load_internal(path: String) -> anyhow::Result<Self> {
-        let bufreader = std::io::BufReader::new(std::fs::File::open(path).unwrap());
-        let vfs = serde_json::from_reader(bufreader).unwrap();
+        let bufreader = std::io::BufReader::new(std::fs::File::open(path).map_err(|e| { eprintln!("error: {}", e); e})?);
+        let vfs = serde_json::from_reader(bufreader).map_err(|e| { eprintln!("error: {}", e); e})?;
         Ok(vfs)
     }
 
     fn new(path: String) -> Self {
         println!("Creating new filesystem from scratch!");
-        let vfs = Self {
+        let mut vfs = Self {
             disk_path: path,
             root: Folder::empty(),
         };
+        vfs.create_folder("", "test").unwrap();
+        vfs.create_file("test", "test_file.txt").unwrap();
         vfs.flush();
         vfs
     }
 
     pub fn create_folder<S: Into<String>>(&mut self, path: S, name: S) -> Result<(), VFSError> {
-        let name = name.into();
-        let mut path = path.into();
-        if path.starts_with("/") {
-            path.remove(0);
-        }
-        if path.ends_with("/") {
-            path.pop();
-        }
+        let name = clean_path(name);
+        let path = clean_path(path);
         if path == "" {
             return self.root.create_folder_local(name.clone());
         }
-        let mut path_split = path.split("/").map(|s| s.to_owned()).collect::<Vec<String>>().into_iter().rev();
+        let mut path_split = validate_path(path.split("/").map(|s| s.to_owned()).collect::<Vec<String>>())?.into_iter().rev();
         self.root.create_folder(&mut path_split, name)
+    }
+
+    pub fn create_file<S: Into<String>>(&mut self, path: S, name: S) -> Result<(), VFSError> {
+        let name = clean_path(name);
+        let path = clean_path(path);
+        let full_path = format!("{}/{}", path.clone(), name.clone());
+        if path == "" {
+            return self.root.create_file_local(name.clone(), full_path);
+        }
+        let mut path_split = validate_path(path.split("/").map(|s| s.to_owned()).collect::<Vec<String>>())?.into_iter().rev();
+        self.root.create_file(&mut path_split, name, full_path)
     }
 }
 
@@ -111,7 +148,16 @@ impl Folder {
         Ok(())
     }
 
-    fn create_file<S: Into<String>>(&mut self, name: S, full_path: S) -> Result<(), VFSError> {
+    fn create_file<P: Iterator<Item = String>, S: Into<String>>(&mut self, path_iter: &mut P, name: S, full_path: S) -> Result<(), VFSError> {
+        if let Some(next) = path_iter.next() {
+            self.get_folder_mut(next)?.create_file(path_iter, name, full_path)
+        } else {
+            // There is no next, so we must insert into ourself
+            self.create_file_local(name, full_path)
+        }
+    }
+
+    fn create_file_local<S: Into<String>>(&mut self, name: S, full_path: S) -> Result<(), VFSError> {
         let name = name.into();
         let full_path = full_path.into();
         if self.children.contains_key(&name) {
