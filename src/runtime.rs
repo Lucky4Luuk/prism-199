@@ -1,8 +1,12 @@
 use wasmer::{Store, Module, Instance, NativeFunc, imports};
 
+use crate::vfs::Vfs;
+
 pub struct Runtime {
     module: Module,
     instance: Instance,
+
+    vfs: Vfs,
 
     buf_mem_addr: u32,
 }
@@ -16,18 +20,22 @@ impl Runtime {
         let import_object = imports! {};
         let instance = Instance::new(&module, &import_object).expect("Failed to create OS wasm instance!");
 
+        let vfs = Vfs::load("disk.json");
+
         // First we have to copy our slice into the VM memory
         // This way it becomes accessible to our code running in the wasmer VM
         let memory = instance.exports.get_memory("memory").expect("Failed to get memory!");
         let buf_mem_addr = memory.data_size() as u32;
         println!("mem_addr: {}", buf_mem_addr);
-        memory.grow(1).expect("Failed to grow memory!");
-        let buf = [0u8; 168*72*4];
-        memory.view()[buf_mem_addr as usize .. (buf_mem_addr as usize + 168*72*4)].iter().enumerate().for_each(|(i, c)| c.set(buf[i]));
+        memory.grow(3).expect("Failed to grow memory!");
+        let buf = [0u8; crate::BUFFER_LEN];
+        memory.view()[buf_mem_addr as usize .. (buf_mem_addr as usize + crate::BUFFER_LEN)].iter().enumerate().for_each(|(i, c)| c.set(buf[i]));
 
         Self {
             module: module,
             instance: instance,
+
+            vfs: vfs,
 
             buf_mem_addr: buf_mem_addr,
         }
@@ -41,7 +49,7 @@ impl Runtime {
         // After doing so, we must read back the slice from the VM's memory
         // We need to do this, so we can actually see the data the VM has changed and render it
         let memory = self.instance.exports.get_memory("memory").expect("Failed to get memory!");
-        let buf_view = memory.view().subarray(self.buf_mem_addr, self.buf_mem_addr + 168*72*4);
+        let buf_view = memory.view().subarray(self.buf_mem_addr, self.buf_mem_addr + crate::BUFFER_LEN as u32);
         let buf: Vec<u8> = buf_view[..].iter().map(|c| c.get()).collect();
         info.buf.copy_from_slice(&buf);
     }

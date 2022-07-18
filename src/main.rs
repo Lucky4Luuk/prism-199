@@ -7,14 +7,16 @@ use winit_input_helper::WinitInputHelper;
 
 pub mod runtime;
 pub mod input;
+pub mod vfs;
 
 use runtime::Runtime;
 
 const WINDOW_WIDTH: u32 = 1680;
 const WINDOW_HEIGHT: u32 = 720;
 
-const BUFFER_WIDTH: u32 = 168;
-const BUFFER_HEIGHT: u32 = 72;
+const BUFFER_WIDTH: u32 = 336;
+const BUFFER_HEIGHT: u32 = 144;
+const BUFFER_LEN: usize = BUFFER_WIDTH as usize * BUFFER_HEIGHT as usize * 4;
 
 pub struct FrameInfo<'frame> {
     buf: &'frame mut [u8],
@@ -25,7 +27,7 @@ fn main() {
     let mut input = WinitInputHelper::new();
     let window = {
         let size = LogicalSize::new(WINDOW_WIDTH as f64, WINDOW_HEIGHT as f64);
-        let min_size = LogicalSize::new(168f64, 72f64);
+        let min_size = LogicalSize::new(BUFFER_WIDTH as f64, BUFFER_HEIGHT as f64);
         WindowBuilder::new()
             .with_title("PRISM-199 - FANTASY COMPUTER - V[0.1]")
             .with_inner_size(size)
