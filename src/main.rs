@@ -7,7 +7,6 @@ use winit_input_helper::WinitInputHelper;
 
 pub mod runtime;
 pub mod input;
-pub mod vfs;
 
 use runtime::Runtime;
 
@@ -42,7 +41,7 @@ fn main() {
         Pixels::new(BUFFER_WIDTH, BUFFER_HEIGHT, surface_texture).expect("Failed to create Pixels object!")
     };
 
-    let mut runtime = Runtime::new("../prism-os/target/wasm32-unknown-unknown/release/prism_os.wasm");
+    let mut runtime = Runtime::new("../prism-os/target/wasm32-wasi/release/prism_os.wasm");
 
     let mut previous_frame = std::time::Instant::now();
     let mut delta_s = 0.0;

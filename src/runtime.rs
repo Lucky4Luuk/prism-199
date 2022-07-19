@@ -1,6 +1,5 @@
 use wasmer::*;
-
-use crate::vfs::VFS;
+use wasmer_wasi::WasiState;
 
 pub struct Runtime {
     module: Module,
@@ -15,12 +14,11 @@ impl Runtime {
 
         let store = Store::default();
         let module = Module::new(&store, wasm_bytes).expect("OS code does not compile!");
-        let env = Env { memory: LazyInit::new() };
-        let import_object = imports! {
-            "env" => {
-                "fs_create_folder" => Function::new_native_with_env(&store, env, fs_create_folder)
-            }
-        };
+        let mut wasi_env = WasiState::new("test")
+            .preopen_dir("disk").expect("Failed to preopen disk folder!")
+            .finalize().expect("Failed to create WasiState!");
+        let import_object = wasi_env.import_object(&module).expect("Failed to create import object!");
+        // let import_object = wasmer_wasi::generate_import_object_from_env(&store, wasi_env, WasiVersion::Latest);
         let instance = Instance::new(&module, &import_object).expect("Failed to create OS wasm instance!");
 
         // First we have to copy our slice into the VM memory
@@ -52,15 +50,4 @@ impl Runtime {
         let buf: Vec<u8> = buf_view[..].iter().map(|c| c.get()).collect();
         info.buf.copy_from_slice(&buf);
     }
-}
-
-#[derive(WasmerEnv, Clone)]
-pub struct Env {
-    #[wasmer(export)]
-    memory: LazyInit<Memory>,
-}
-
-fn fs_create_folder(env: &Env, path_str_ptr: WasmPtr<u8, Array>, path_str_len: u32) {
-    let path = unsafe { path_str_ptr.get_utf8_str(&env.memory.get_unchecked(), path_str_len) };
-    todo!();
 }
