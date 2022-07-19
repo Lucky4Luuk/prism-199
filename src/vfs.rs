@@ -1,9 +1,14 @@
+use std::sync::Mutex;
 use std::collections::HashMap;
 
 use lazy_static::lazy_static;
 use regex::Regex;
 
 use serde::{Serialize, Deserialize};
+
+lazy_static! {
+    pub static ref VFS: Mutex<Vfs> = Mutex::new(Vfs::load("disk.json"));
+}
 
 #[derive(Debug)]
 pub enum VFSError {

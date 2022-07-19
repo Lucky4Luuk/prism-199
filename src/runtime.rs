@@ -1,12 +1,10 @@
-use wasmer::{Store, Module, Instance, NativeFunc, imports};
+use wasmer::*;
 
-use crate::vfs::Vfs;
+use crate::vfs::VFS;
 
 pub struct Runtime {
     module: Module,
     instance: Instance,
-
-    vfs: Vfs,
 
     buf_mem_addr: u32,
 }
@@ -17,10 +15,13 @@ impl Runtime {
 
         let store = Store::default();
         let module = Module::new(&store, wasm_bytes).expect("OS code does not compile!");
-        let import_object = imports! {};
+        let env = Env { memory: LazyInit::new() };
+        let import_object = imports! {
+            "env" => {
+                "fs_create_folder" => Function::new_native_with_env(&store, env, fs_create_folder)
+            }
+        };
         let instance = Instance::new(&module, &import_object).expect("Failed to create OS wasm instance!");
-
-        let vfs = Vfs::load("disk.json");
 
         // First we have to copy our slice into the VM memory
         // This way it becomes accessible to our code running in the wasmer VM
@@ -34,8 +35,6 @@ impl Runtime {
         Self {
             module: module,
             instance: instance,
-
-            vfs: vfs,
 
             buf_mem_addr: buf_mem_addr,
         }
@@ -53,4 +52,15 @@ impl Runtime {
         let buf: Vec<u8> = buf_view[..].iter().map(|c| c.get()).collect();
         info.buf.copy_from_slice(&buf);
     }
+}
+
+#[derive(WasmerEnv, Clone)]
+pub struct Env {
+    #[wasmer(export)]
+    memory: LazyInit<Memory>,
+}
+
+fn fs_create_folder(env: &Env, path_str_ptr: WasmPtr<u8, Array>, path_str_len: u32) {
+    let path = unsafe { path_str_ptr.get_utf8_str(&env.memory.get_unchecked(), path_str_len) };
+    todo!();
 }
