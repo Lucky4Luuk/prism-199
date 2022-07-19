@@ -87,6 +87,26 @@ impl Vfs {
         vfs
     }
 
+    pub fn get_folder_mut<S: Into<String>>(&mut self, path: S, name: S) -> Result<&mut Folder, VFSError> {
+        let name = clean_path(name);
+        let path = clean_path(path);
+        if path == "" {
+            return self.root.get_folder_local_mut(name.clone());
+        }
+        let mut path_split = validate_path(path.split("/").map(|s| s.to_owned()).collect::<Vec<String>>())?.into_iter().rev();
+        self.root.get_folder_mut(&mut path_split, name)
+    }
+
+    pub fn get_folder<S: Into<String>>(&self, path: S, name: S) -> Result<&Folder, VFSError> {
+        let name = clean_path(name);
+        let path = clean_path(path);
+        if path == "" {
+            return self.root.get_folder_local(name.clone());
+        }
+        let mut path_split = validate_path(path.split("/").map(|s| s.to_owned()).collect::<Vec<String>>())?.into_iter().rev();
+        self.root.get_folder(&mut path_split, name)
+    }
+
     pub fn create_folder<S: Into<String>>(&mut self, path: S, name: S) -> Result<(), VFSError> {
         let name = clean_path(name);
         let path = clean_path(path);
@@ -127,7 +147,7 @@ impl Folder {
         }
     }
 
-    fn get_folder_mut<S: Into<String>>(&mut self, name: S) -> Result<&mut Folder, VFSError> {
+    fn get_folder_local_mut<S: Into<String>>(&mut self, name: S) -> Result<&mut Folder, VFSError> {
         let name = name.into();
         match self.children.get_mut(&name).ok_or(VFSError::CreatePathDoesNotExist)? {
             VFSItem::Folder(folder) => Ok(folder),
@@ -135,9 +155,33 @@ impl Folder {
         }
     }
 
+    fn get_folder_local<S: Into<String>>(&self, name: S) -> Result<&Folder, VFSError> {
+        let name = name.into();
+        match self.children.get(&name).ok_or(VFSError::CreatePathDoesNotExist)? {
+            VFSItem::Folder(folder) => Ok(folder),
+            VFSItem::File(_) => Err(VFSError::FolderPathIsFile),
+        }
+    }
+
+    fn get_folder_mut<P: Iterator<Item = String>, S: Into<String>>(&mut self, path_iter: &mut P, name: S) -> Result<&mut Folder, VFSError> {
+        if let Some(next) = path_iter.next() {
+            self.get_folder_local_mut(next)?.get_folder_mut(path_iter, name)
+        } else {
+            self.get_folder_local_mut(name)
+        }
+    }
+
+    fn get_folder<P: Iterator<Item = String>, S: Into<String>>(&self, path_iter: &mut P, name: S) -> Result<&Folder, VFSError> {
+        if let Some(next) = path_iter.next() {
+            self.get_folder_local(next)?.get_folder(path_iter, name)
+        } else {
+            self.get_folder_local(name)
+        }
+    }
+
     fn create_folder<P: Iterator<Item = String>, S: Into<String>>(&mut self, path_iter: &mut P, name: S) -> Result<(), VFSError> {
         if let Some(next) = path_iter.next() {
-            self.get_folder_mut(next)?.create_folder(path_iter, name)
+            self.get_folder_local_mut(next)?.create_folder(path_iter, name)
         } else {
             // There is no next, so we must insert into ourself
             self.create_folder_local(name)
@@ -155,7 +199,7 @@ impl Folder {
 
     fn create_file<P: Iterator<Item = String>, S: Into<String>>(&mut self, path_iter: &mut P, name: S, full_path: S) -> Result<(), VFSError> {
         if let Some(next) = path_iter.next() {
-            self.get_folder_mut(next)?.create_file(path_iter, name, full_path)
+            self.get_folder_local_mut(next)?.create_file(path_iter, name, full_path)
         } else {
             // There is no next, so we must insert into ourself
             self.create_file_local(name, full_path)
