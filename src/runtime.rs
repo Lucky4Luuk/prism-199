@@ -25,7 +25,7 @@ impl Runtime {
         // This way it becomes accessible to our code running in the wasmer VM
         let memory = instance.exports.get_memory("memory").expect("Failed to get memory!");
         let buf_mem_addr = memory.data_size() as u32;
-        println!("mem_addr: {}", buf_mem_addr);
+        println!("buf_mem_addr: {}", buf_mem_addr);
         memory.grow(3).expect("Failed to grow memory!");
         let buf = [0u8; crate::BUFFER_LEN];
         memory.view()[buf_mem_addr as usize .. (buf_mem_addr as usize + crate::BUFFER_LEN)].iter().enumerate().for_each(|(i, c)| c.set(buf[i]));
