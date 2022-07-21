@@ -24,7 +24,8 @@ impl Runtime {
         // First we have to copy our slice into the VM memory
         // This way it becomes accessible to our code running in the wasmer VM
         let memory = instance.exports.get_memory("memory").expect("Failed to get memory!");
-        let buf_mem_addr = memory.data_size() as u32;
+        // let buf_mem_addr = memory.data_size() as u32;
+        let buf_mem_addr = 0x80;
         println!("buf_mem_addr: {}", buf_mem_addr);
         memory.grow(3).expect("Failed to grow memory!");
         let buf = [0u8; crate::BUFFER_LEN];
@@ -40,8 +41,8 @@ impl Runtime {
 
     pub fn tick(&mut self, info: crate::FrameInfo, input: u64, delta_s: f32) {
         // The framebuffer slice exists in the VM too, so we can use it to call the draw function
-        let func: NativeFunc<(u32, u64, f32), ()> = self.instance.exports.get_native_function("tick").expect("Failed to get tick function!");
-        func.call(self.buf_mem_addr, input, delta_s).expect("Failed to call tick function!");
+        let func: NativeFunc<(u64, f32), ()> = self.instance.exports.get_native_function("tick").expect("Failed to get tick function!");
+        func.call(input, delta_s).expect("Failed to call tick function!");
 
         // After doing so, we must read back the slice from the VM's memory
         // We need to do this, so we can actually see the data the VM has changed and render it
