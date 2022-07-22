@@ -62,11 +62,12 @@ pub fn input_to_u64(input: &WinitInputHelper) -> u64 {
         VirtualKeyCode::Space,      // 49
         VirtualKeyCode::Back,       // 50
         VirtualKeyCode::Delete,     // 51
+        VirtualKeyCode::Return,     // 52
     ];
 
     let mut bitfield = 0;
     for (i, btn) in buttons.iter().enumerate() {
-        bitfield |= (input.key_held(*btn) as u64) >> i;
+        bitfield |= (input.key_held(*btn) as u64) << i;
     }
     bitfield
 }
