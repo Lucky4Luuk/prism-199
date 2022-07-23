@@ -2,7 +2,7 @@ use wasmtime::*;
 use wasmtime_wasi::WasiCtx;
 
 fn spawn_runtime(caller: Caller<'_, Env>, ptr: u32, len: u32) {
-    println!("it worked!");
+    println!("Spawning runtime...");
 }
 
 struct Env {
@@ -23,12 +23,12 @@ impl Runtime {
         let engine = Engine::default();
         let module = Module::new(&engine, wasm_bytes).unwrap();
         let mut linker = Linker::new(&engine);
-        linker.func_wrap("env", "spawn_runtime", |caller: Caller<'_, Env>, ptr: i32, len: i32| spawn_runtime(caller, ptr as u32, len as u32)).unwrap();
+        linker.func_wrap("env", "spawn_runtime", |caller: Caller<'_, Env>, ptr: u32, len: u32| spawn_runtime(caller, ptr, len)).expect("Failed to export host function `spawn_runtime`!");
         wasmtime_wasi::add_to_linker(&mut linker, |s: &mut Env| &mut s.wasi).unwrap();
-        // let dir = wasmtime_wasi::Dir::from_std_file(std::fs::OpenOptions::new().read(true).write(true).create(true).open("./disk/").unwrap());
+        let dir = wasmtime_wasi::Dir::open_ambient_dir("disk", wasmtime_wasi::sync::ambient_authority()).expect("Failed to preopen disk directory!");
         let wasi = wasmtime_wasi::WasiCtxBuilder::new()
             .inherit_stdio()
-            // .preopened_dir(dir, "/").unwrap()
+            .preopened_dir(dir, "/").expect("Failed to preopen directory!")
             .build();
         let mut store = Store::new(&engine, Env {
             wasi: wasi,
