@@ -55,14 +55,15 @@ pub fn input_to_u64(input: &WinitInputHelper) -> u64 {
         VirtualKeyCode::Semicolon,  // 44
         VirtualKeyCode::Apostrophe, // 45
         VirtualKeyCode::Backslash,  // 46
+        VirtualKeyCode::Slash,      // 47
 
         // 47-51
-        VirtualKeyCode::Tab,        // 47
-        VirtualKeyCode::Escape,     // 48
-        VirtualKeyCode::Space,      // 49
-        VirtualKeyCode::Back,       // 50
-        VirtualKeyCode::Delete,     // 51
-        VirtualKeyCode::Return,     // 52
+        VirtualKeyCode::Tab,        // 48
+        VirtualKeyCode::Escape,     // 49
+        VirtualKeyCode::Space,      // 50
+        VirtualKeyCode::Back,       // 51
+        VirtualKeyCode::Delete,     // 52
+        VirtualKeyCode::Return,     // 53
     ];
 
     let mut bitfield = 0;

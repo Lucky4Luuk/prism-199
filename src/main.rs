@@ -49,9 +49,7 @@ fn main() {
     event_loop.run(move |event, _, control_flow| {
         // Draw the current frame
         if let Event::RedrawRequested(_) = event {
-            runtime.tick(FrameInfo {
-                buf: pixels.get_frame(),
-            }, input::input_to_u64(&input), delta_s);
+            runtime.tick(pixels.get_frame(), input::input_to_u64(&input), delta_s);
             if pixels
                 .render()
                 .map_err(|e| eprintln!("pixels.render() failed: {}", e))

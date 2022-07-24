@@ -30,6 +30,7 @@ pub struct Runtime {
     instance: Instance,
 
     buf_mem_addr: u32,
+    is_done: bool,
 }
 
 impl Runtime {
@@ -70,19 +71,28 @@ impl Runtime {
             instance: instance,
 
             buf_mem_addr: buf_mem_addr,
+            is_done: false,
         }
     }
 
-    pub fn tick(&mut self, info: crate::FrameInfo, input: u64, delta_s: f32) {
+    pub fn tick(&mut self, frame: &mut [u8], input: u64, delta_s: f32) -> u32 {
         // The framebuffer slice exists in the VM too, so we can use it to call the draw function
-        let func = self.instance.get_typed_func::<(u64, f32), (), _>(&mut self.store, "tick").expect("Failed to get tick function!");
-        func.call(&mut self.store, (input, delta_s)).expect("Failed to call tick function!");
+        let func = self.instance.get_typed_func::<(u64, f32), u32, _>(&mut self.store, "tick").expect("Failed to get tick function!");
+        let tick_result = func.call(&mut self.store, (input, delta_s)).expect("Failed to call tick function!");
 
         // After doing so, we must read back the slice from the VM's memory
         // We need to do this, so we can actually see the data the VM has changed and render it
         let memory = self.instance.get_memory(&mut self.store, "memory").expect("Failed to get memory!");
         // let buf_view = memory.data_mut(&mut self.store).subarray(self.buf_mem_addr, self.buf_mem_addr + crate::BUFFER_LEN as u32);
         let buf: Vec<u8> = memory.data_mut(&mut self.store)[self.buf_mem_addr as usize .. (self.buf_mem_addr as usize + crate::BUFFER_LEN)].iter().map(|c| *c).collect();
-        info.buf.copy_from_slice(&buf);
+        frame.copy_from_slice(&buf);
+
+        for i in 0..self.store.data_mut().children.len() {
+            if self.store.data_mut().children[i].tick(frame, input, delta_s) > 0 {
+                self.store.data_mut().children.remove(i);
+            }
+        }
+
+        tick_result
     }
 }
