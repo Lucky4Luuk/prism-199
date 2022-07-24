@@ -1,5 +1,10 @@
+use std::io::Cursor;
+use std::sync::{Arc, RwLock};
+
 use wasmtime::*;
 use wasmtime_wasi::WasiCtx;
+use wasmtime_wasi::sync::stdio::{stdout, Stdout};
+use wasi_common::pipe::WritePipe;
 
 /// This function returns the program index + 1
 /// If it returns 0, an error has occured. There's currently no way to see what the error was
@@ -12,7 +17,7 @@ fn spawn_runtime(mut caller: Caller<'_, Env>, ptr: u64, len: u64) -> u64 {
             if err.is_err() { return 0; }
             let mut store = caller.as_context_mut();
             let env = store.data_mut();
-            let runtime = Runtime::from_bytes(&data_buf);
+            let runtime = Runtime::from_bytes(&data_buf, Some(env.out.clone()));
             env.children.push(runtime);
             env.children.len() as u64 //Return current program index + 1
         },
@@ -23,6 +28,7 @@ fn spawn_runtime(mut caller: Caller<'_, Env>, ptr: u64, len: u64) -> u64 {
 pub struct Env {
     wasi: WasiCtx,
     pub children: Vec<Runtime>,
+    pub out: WritePipe<Cursor<Vec<u8>>>,
 }
 
 pub struct Runtime {
@@ -30,29 +36,35 @@ pub struct Runtime {
     instance: Instance,
 
     buf_mem_addr: u32,
-    is_done: bool,
+    out_buf: Arc<RwLock<Cursor<Vec<u8>>>>,
 }
 
 impl Runtime {
-    pub fn new(os_path: &str) -> Self {
+    pub fn new(os_path: &str, output: Option<WritePipe<Cursor<Vec<u8>>>>) -> Self {
         let wasm_bytes = std::fs::read(os_path).expect("File does not exist!");
-        Self::from_bytes(&wasm_bytes)
+        Self::from_bytes(&wasm_bytes, output)
     }
 
-    pub fn from_bytes(wasm_bytes: &[u8]) -> Self {
+    pub fn from_bytes(wasm_bytes: &[u8], output: Option<WritePipe<Cursor<Vec<u8>>>>) -> Self {
         let engine = Engine::default();
         let module = Module::new(&engine, wasm_bytes).unwrap();
+
         let mut linker = Linker::new(&engine);
         linker.func_wrap("env", "spawn_runtime", |caller: Caller<'_, Env>, ptr: u64, len: u64| spawn_runtime(caller, ptr, len)).unwrap();
+
         wasmtime_wasi::add_to_linker(&mut linker, |s: &mut Env| &mut s.wasi).unwrap();
         let dir = wasmtime_wasi::Dir::open_ambient_dir("disk", wasmtime_wasi::sync::ambient_authority()).expect("Failed to preopen disk directory!");
-        let wasi = wasmtime_wasi::WasiCtxBuilder::new()
-            .inherit_stdio()
-            .preopened_dir(dir, "/").expect("Failed to preopen directory!")
-            .build();
+        let mut wasi = wasmtime_wasi::WasiCtxBuilder::new().preopened_dir(dir, "/").expect("Failed to preopen directory!");
+        if let Some(pipe) = output {
+            wasi = wasi.stdout(Box::new(pipe));
+        } else {
+            wasi = wasi.stdout(Box::new(stdout()));
+        }
+        let out_buf = Arc::new(RwLock::new(Cursor::new(Vec::new())));
         let mut store = Store::new(&engine, Env {
-            wasi: wasi,
+            wasi: wasi.build(),
             children: Vec::new(),
+            out: WritePipe::from_shared(out_buf.clone()),
         });
         let instance = linker.instantiate(&mut store, &module).unwrap();
 
@@ -71,7 +83,7 @@ impl Runtime {
             instance: instance,
 
             buf_mem_addr: buf_mem_addr,
-            is_done: false,
+            out_buf: out_buf,
         }
     }
 
@@ -92,6 +104,16 @@ impl Runtime {
                 self.store.data_mut().children.remove(i);
             }
         }
+
+        // let output = {
+        //     let out = self.out_buf.clone();
+        //     let lock = out.as_ref().read().unwrap();
+        //     let contents: &Vec<u8> = lock.get_ref();
+        //     std::str::from_utf8(contents).unwrap_or("Failed to get stdout!").to_owned()
+        // };
+        // if let Ok(func) = self.instance.get_typed_func::<(u64, u64), (), _>(&mut self.store, "stdout") {
+        //     func.call(&mut self.store, ())
+        // }
 
         tick_result
     }

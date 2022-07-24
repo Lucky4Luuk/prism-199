@@ -17,10 +17,6 @@ const BUFFER_WIDTH: u32 = 336;
 const BUFFER_HEIGHT: u32 = 144;
 const BUFFER_LEN: usize = BUFFER_WIDTH as usize * BUFFER_HEIGHT as usize * 4;
 
-pub struct FrameInfo<'frame> {
-    buf: &'frame mut [u8],
-}
-
 fn main() {
     let event_loop = EventLoop::new();
     let mut input = WinitInputHelper::new();
@@ -41,7 +37,7 @@ fn main() {
         Pixels::new(BUFFER_WIDTH, BUFFER_HEIGHT, surface_texture).expect("Failed to create Pixels object!")
     };
 
-    let mut runtime = Runtime::new("../prism-os/target/wasm32-wasi/release/prism_os.wasm");
+    let mut runtime = Runtime::new("../prism-os/target/wasm32-wasi/release/prism_os.wasm", None);
 
     let mut previous_frame = std::time::Instant::now();
     let mut delta_s = 0.0;

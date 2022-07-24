@@ -1479,6 +1479,7 @@ dependencies = [
  "regex",
  "serde",
  "serde_json",
+ "wasi-common",
  "wasmtime",
  "wasmtime-wasi",
  "winit",
