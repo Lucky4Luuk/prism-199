@@ -1,6 +1,8 @@
 use wasmtime::*;
 use wasmtime_wasi::WasiCtx;
 
+/// This function returns the program index + 1
+/// If it returns 0, an error has occured. There's currently no way to see what the error was
 fn spawn_runtime(mut caller: Caller<'_, Env>, ptr: u64, len: u64) -> u64 {
     let exp = caller.get_export("memory");
     match exp {
@@ -12,12 +14,10 @@ fn spawn_runtime(mut caller: Caller<'_, Env>, ptr: u64, len: u64) -> u64 {
             let env = store.data_mut();
             let runtime = Runtime::from_bytes(&data_buf);
             env.children.push(runtime);
-            1
+            env.children.len() as u64 //Return current program index + 1
         },
         _ => 0,
     }
-    // let path =
-    // println!("it worked! wasm path: {}", path);
 }
 
 pub struct Env {
