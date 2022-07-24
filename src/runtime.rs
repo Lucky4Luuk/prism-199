@@ -44,10 +44,10 @@ impl Runtime {
         let mut linker = Linker::new(&engine);
         linker.func_wrap("env", "spawn_runtime", |caller: Caller<'_, Env>, ptr: u64, len: u64| spawn_runtime(caller, ptr, len)).unwrap();
         wasmtime_wasi::add_to_linker(&mut linker, |s: &mut Env| &mut s.wasi).unwrap();
-        // let dir = wasmtime_wasi::Dir::from_std_file(std::fs::OpenOptions::new().read(true).write(true).create(true).open("./disk/").unwrap());
+        let dir = wasmtime_wasi::Dir::open_ambient_dir("disk", wasmtime_wasi::sync::ambient_authority()).expect("Failed to preopen disk directory!");
         let wasi = wasmtime_wasi::WasiCtxBuilder::new()
             .inherit_stdio()
-            // .preopened_dir(dir, "/").unwrap()
+            .preopened_dir(dir, "/").expect("Failed to preopen directory!")
             .build();
         let mut store = Store::new(&engine, Env {
             wasi: wasi,
