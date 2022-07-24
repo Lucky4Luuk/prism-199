@@ -1,16 +1,32 @@
 use wasmtime::*;
 use wasmtime_wasi::WasiCtx;
 
-fn spawn_runtime(caller: Caller<'_, Env>, ptr: u32, len: u32) {
-    println!("it worked!");
+fn spawn_runtime(mut caller: Caller<'_, Env>, ptr: u64, len: u64) -> u64 {
+    let exp = caller.get_export("memory");
+    match exp {
+        Some(Extern::Memory(mem)) => {
+            let mut data_buf = vec![0u8; len as usize];
+            let err = mem.read(&mut caller, ptr as usize, &mut data_buf);
+            if err.is_err() { return 0; }
+            let mut store = caller.as_context_mut();
+            let env = store.data_mut();
+            let runtime = Runtime::from_bytes(&data_buf);
+            env.children.push(runtime);
+            1
+        },
+        _ => 0,
+    }
+    // let path =
+    // println!("it worked! wasm path: {}", path);
 }
 
-struct Env {
+pub struct Env {
     wasi: WasiCtx,
+    pub children: Vec<Runtime>,
 }
 
 pub struct Runtime {
-    store: Store<Env>,
+    pub store: Store<Env>,
     instance: Instance,
 
     buf_mem_addr: u32,
@@ -19,11 +35,14 @@ pub struct Runtime {
 impl Runtime {
     pub fn new(os_path: &str) -> Self {
         let wasm_bytes = std::fs::read(os_path).expect("File does not exist!");
+        Self::from_bytes(&wasm_bytes)
+    }
 
+    pub fn from_bytes(wasm_bytes: &[u8]) -> Self {
         let engine = Engine::default();
         let module = Module::new(&engine, wasm_bytes).unwrap();
         let mut linker = Linker::new(&engine);
-        linker.func_wrap("env", "spawn_runtime", |caller: Caller<'_, Env>, ptr: i32, len: i32| spawn_runtime(caller, ptr as u32, len as u32)).unwrap();
+        linker.func_wrap("env", "spawn_runtime", |caller: Caller<'_, Env>, ptr: u64, len: u64| spawn_runtime(caller, ptr, len)).unwrap();
         wasmtime_wasi::add_to_linker(&mut linker, |s: &mut Env| &mut s.wasi).unwrap();
         // let dir = wasmtime_wasi::Dir::from_std_file(std::fs::OpenOptions::new().read(true).write(true).create(true).open("./disk/").unwrap());
         let wasi = wasmtime_wasi::WasiCtxBuilder::new()
@@ -32,6 +51,7 @@ impl Runtime {
             .build();
         let mut store = Store::new(&engine, Env {
             wasi: wasi,
+            children: Vec::new(),
         });
         let instance = linker.instantiate(&mut store, &module).unwrap();
 
