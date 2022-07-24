@@ -25,10 +25,28 @@ fn spawn_runtime(mut caller: Caller<'_, Env>, ptr: u64, len: u64) -> u64 {
     }
 }
 
+fn read_stdout(mut caller: Caller<'_, Env>, buf_ptr: u64, buf_len: u64) -> u64 {
+    use std::io::Read;
+    if let Some(Extern::Memory(mem)) = caller.get_export("memory") {
+        let mut store = caller.as_context_mut();
+        let env = store.data();
+        let out = env.out_buf.clone();
+        let mut lock = out.as_ref().write().unwrap();
+        let mut buf = vec![0u8; buf_len as usize];
+        let bytes_read = lock.read(&mut buf).expect("Failed to read stdio!") as u64;
+        if bytes_read > 0 { println!("bytes_read_host: {}", bytes_read); }
+        mem.data_mut(&mut store)[buf_ptr as usize .. (buf_ptr + buf_len) as usize].copy_from_slice(&buf);
+        bytes_read
+    } else {
+        0
+    }
+}
+
 pub struct Env {
     wasi: WasiCtx,
     pub children: Vec<Runtime>,
     pub out: WritePipe<Cursor<Vec<u8>>>,
+    out_buf: Arc<RwLock<Cursor<Vec<u8>>>>,
 }
 
 pub struct Runtime {
@@ -36,7 +54,6 @@ pub struct Runtime {
     instance: Instance,
 
     buf_mem_addr: u32,
-    out_buf: Arc<RwLock<Cursor<Vec<u8>>>>,
 }
 
 impl Runtime {
@@ -51,6 +68,7 @@ impl Runtime {
 
         let mut linker = Linker::new(&engine);
         linker.func_wrap("env", "spawn_runtime", |caller: Caller<'_, Env>, ptr: u64, len: u64| spawn_runtime(caller, ptr, len)).unwrap();
+        linker.func_wrap("env", "read_stdout", |caller: Caller<'_, Env>, buf_ptr: u64, buf_len: u64| read_stdout(caller, buf_ptr, buf_len)).unwrap();
 
         wasmtime_wasi::add_to_linker(&mut linker, |s: &mut Env| &mut s.wasi).unwrap();
         let dir = wasmtime_wasi::Dir::open_ambient_dir("disk", wasmtime_wasi::sync::ambient_authority()).expect("Failed to preopen disk directory!");
@@ -65,6 +83,7 @@ impl Runtime {
             wasi: wasi.build(),
             children: Vec::new(),
             out: WritePipe::from_shared(out_buf.clone()),
+            out_buf: out_buf,
         });
         let instance = linker.instantiate(&mut store, &module).unwrap();
 
@@ -73,7 +92,6 @@ impl Runtime {
         let memory = instance.get_memory(&mut store, "memory").expect("Failed to get memory!");
         // let buf_mem_addr = memory.data_size() as u32;
         let buf_mem_addr = 0x80;
-        println!("buf_mem_addr: {}", buf_mem_addr);
         memory.grow(&mut store, 3).expect("Failed to grow memory!");
         let buf = [0u8; crate::BUFFER_LEN];
         memory.data_mut(&mut store)[buf_mem_addr as usize .. (buf_mem_addr as usize + crate::BUFFER_LEN)].iter_mut().enumerate().for_each(|(i, c)| *c = buf[i]);
@@ -83,7 +101,6 @@ impl Runtime {
             instance: instance,
 
             buf_mem_addr: buf_mem_addr,
-            out_buf: out_buf,
         }
     }
 
@@ -104,16 +121,6 @@ impl Runtime {
                 self.store.data_mut().children.remove(i);
             }
         }
-
-        // let output = {
-        //     let out = self.out_buf.clone();
-        //     let lock = out.as_ref().read().unwrap();
-        //     let contents: &Vec<u8> = lock.get_ref();
-        //     std::str::from_utf8(contents).unwrap_or("Failed to get stdout!").to_owned()
-        // };
-        // if let Ok(func) = self.instance.get_typed_func::<(u64, u64), (), _>(&mut self.store, "stdout") {
-        //     func.call(&mut self.store, ())
-        // }
 
         tick_result
     }
