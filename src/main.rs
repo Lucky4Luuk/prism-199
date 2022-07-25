@@ -1,3 +1,7 @@
+#![feature(cursor_remaining)]
+#![feature(read_buf)]
+#![feature(allocator_api)]
+
 use pixels::{Pixels, SurfaceTexture};
 use winit::dpi::LogicalSize;
 use winit::event::Event;
@@ -7,6 +11,7 @@ use winit_input_helper::WinitInputHelper;
 
 pub mod runtime;
 pub mod input;
+pub mod rw_cursor;
 
 use runtime::Runtime;
 

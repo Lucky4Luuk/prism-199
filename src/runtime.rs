@@ -1,9 +1,10 @@
-use std::io::Cursor;
+// use std::io::Cursor;
 use std::sync::{Arc, RwLock};
+use crate::rw_cursor::RwCursor;
 
 use wasmtime::*;
 use wasmtime_wasi::WasiCtx;
-use wasmtime_wasi::sync::stdio::{stdout, Stdout};
+use wasmtime_wasi::sync::stdio::stdout;
 use wasi_common::pipe::WritePipe;
 
 /// This function returns the program index + 1
@@ -29,40 +30,42 @@ fn read_stdout(mut caller: Caller<'_, Env>, buf_ptr: u64, buf_len: u64) -> u64 {
     use std::io::Read;
     if let Some(Extern::Memory(mem)) = caller.get_export("memory") {
         let mut store = caller.as_context_mut();
-        let env = store.data();
-        let out = env.out_buf.clone();
-        let mut lock = out.as_ref().write().unwrap();
         let mut buf = vec![0u8; buf_len as usize];
-        let bytes_read = lock.read(&mut buf).expect("Failed to read stdio!") as u64;
-        if bytes_read > 0 { println!("bytes_read_host: {}", bytes_read); }
-        mem.data_mut(&mut store)[buf_ptr as usize .. (buf_ptr + buf_len) as usize].copy_from_slice(&buf);
-        bytes_read
+        let bytes_read = {
+            let env = store.data();
+            let mut lock = env.out_buf.as_ref().write().unwrap();
+            lock.read(&mut buf).unwrap_or(0)
+        };
+        if bytes_read > 0 {
+            mem.data_mut(&mut store)[buf_ptr as usize .. (buf_ptr + buf_len) as usize].copy_from_slice(&buf);
+        }
+        bytes_read as u64
     } else {
         0
     }
 }
 
-pub struct Env {
+pub struct Env<'buf> {
     wasi: WasiCtx,
-    pub children: Vec<Runtime>,
-    pub out: WritePipe<Cursor<Vec<u8>>>,
-    out_buf: Arc<RwLock<Cursor<Vec<u8>>>>,
+    pub children: Vec<Runtime<'buf>>,
+    pub out: WritePipe<RwCursor<Vec<u8>>>,
+    out_buf: Arc<RwLock<RwCursor<Vec<u8>>>>,
 }
 
-pub struct Runtime {
-    pub store: Store<Env>,
+pub struct Runtime<'env> {
+    pub store: Store<Env<'env>>,
     instance: Instance,
 
     buf_mem_addr: u32,
 }
 
-impl Runtime {
-    pub fn new(os_path: &str, output: Option<WritePipe<Cursor<Vec<u8>>>>) -> Self {
+impl<'env> Runtime<'env> {
+    pub fn new(os_path: &str, output: Option<WritePipe<RwCursor<Vec<u8>>>>) -> Self {
         let wasm_bytes = std::fs::read(os_path).expect("File does not exist!");
         Self::from_bytes(&wasm_bytes, output)
     }
 
-    pub fn from_bytes(wasm_bytes: &[u8], output: Option<WritePipe<Cursor<Vec<u8>>>>) -> Self {
+    pub fn from_bytes(wasm_bytes: &[u8], output: Option<WritePipe<RwCursor<Vec<u8>>>>) -> Self {
         let engine = Engine::default();
         let module = Module::new(&engine, wasm_bytes).unwrap();
 
@@ -78,7 +81,7 @@ impl Runtime {
         } else {
             wasi = wasi.stdout(Box::new(stdout()));
         }
-        let out_buf = Arc::new(RwLock::new(Cursor::new(Vec::new())));
+        let out_buf = Arc::new(RwLock::new(RwCursor::new(Vec::new())));
         let mut store = Store::new(&engine, Env {
             wasi: wasi.build(),
             children: Vec::new(),
