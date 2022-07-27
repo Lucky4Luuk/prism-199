@@ -123,7 +123,6 @@ fn main() {
     };
 
     let mut runtime = Runtime::new("../prism-os/target/wasm32-wasi/release/prism_os.wasm", None);
-    // let mut runtime = Runtime::new("disk/bin/gfx_test.wasm", None);
 
     let mut previous_frame = std::time::Instant::now();
     let mut delta_s = 0.0;
