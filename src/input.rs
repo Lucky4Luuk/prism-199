@@ -64,6 +64,7 @@ pub fn input_to_u64(input: &WinitInputHelper) -> u64 {
         VirtualKeyCode::Back,       // 51
         VirtualKeyCode::Delete,     // 52
         VirtualKeyCode::Return,     // 53
+        VirtualKeyCode::LShift,     // 54
     ];
 
     let mut bitfield = 0;
